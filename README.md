@@ -1,0 +1,2 @@
+# RinaChanMaker
+GANで東海りなちゃんをGenrateするコード
