@@ -12,20 +12,17 @@ class Generator:
         self.b_fc1 = tf.Variable(tf.zeros([1028]))
 
         # all-2
-        self.W_fc2 = tf.Variable(tf.random_normal([1028, (5 * 5 * 64)], stddev=0.02))
-        self.b_fc2 = tf.Variable(tf.zeros([(5 * 5 * 64)]))
+        self.W_fc2 = tf.Variable(tf.random_normal([1028, (9 * 9 * 64)], stddev=0.02))
+        self.b_fc2 = tf.Variable(tf.zeros([(9 * 9 * 64)]))
 
         # conv2d-1
-        self.W_conv1 = tf.Variable(tf.random_normal([9, 9, 32, 64], stddev=0.02))
+        self.W_conv1 = tf.Variable(tf.random_normal([18, 18, 32, 64], stddev=0.02))
 
         # conv2d-2
-        self.W_conv2 = tf.Variable(tf.random_normal([18, 18, 16, 32], stddev=0.02))
-
-        # conv2d-3
-        self.W_conv3 = tf.Variable(tf.random_normal([x_size, y_size, 3, 16], stddev=0.02))
+        self.W_conv2 = tf.Variable(tf.random_normal([x_size, y_size, 3, 32], stddev=0.02))
 
     def var_list(self):
-        return [self.W_fc1, self.b_fc1, self.W_fc2, self.b_fc2, self.W_conv1, self.W_conv2, self.W_conv3]
+        return [self.W_fc1, self.b_fc1, self.W_fc2, self.b_fc2, self.W_conv1, self.W_conv2]
 
     def __call__(self, batch_size=1):
         """
@@ -40,18 +37,14 @@ class Generator:
         h_fc2 = tf.matmul(h_fc1, self.W_fc2) + self.b_fc2
         h_fc2 = tf.nn.leaky_relu(self.batch_norm(h_fc2, [0, 1]))
         h_fc2 = tf.nn.dropout(h_fc2, 0.5)
-        h_conv_in = tf.reshape(h_fc2, [-1, 5, 5, 64])
+        h_conv_in = tf.reshape(h_fc2, [-1, 9, 9, 64])
 
         # 畳み込み層1
-        h_conv1 = self.conv2d_transpose(h_conv_in, self.W_conv1, [9, 9, 32])
-        h_conv1 = tf.nn.leaky_relu(self.batch_norm(h_conv1, [0, 1, 2]))
+        h_conv1 = self.conv2d_transpose(h_conv_in, self.W_conv1, [18, 18, 32])
+        h_conv1 = tf.nn.leaky_relu(self.batch_norm(h_conv1, [0, 1]))
 
-        # 畳み込み層1
-        h_conv2 = self.conv2d_transpose(h_conv1, self.W_conv2, [18, 18, 16])
-        h_conv2 = tf.nn.leaky_relu(self.batch_norm(h_conv2, [0, 1, 2]))
-
-        # 畳み込み層3
-        img = self.conv2d_transpose(h_conv2, self.W_conv3, [self.x_size, self.y_size, 3])
+        # 畳み込み層2
+        img = self.conv2d_transpose(h_conv1, self.W_conv2, [self.x_size, self.y_size, 3])
         y_conv = tf.reshape(tf.math.tanh(img), [-1, (self.x_size * self.y_size * 3)])
         return y_conv
 

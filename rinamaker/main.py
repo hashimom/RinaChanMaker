@@ -13,7 +13,7 @@ image_size = image_x * image_y
 # RGB
 image_data_size = image_size * 3
 
-batch_size = 64
+batch_size = 512
 Z_dim = 100
 epoch_num = 50000
 
@@ -85,16 +85,21 @@ if os.path.isdir(model_path):
     shutil.rmtree(model_path)
 
 saver = tf.train.Saver()
-with tf.Session() as sess:
+session_config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+with tf.Session(config = session_config) as sess:
     sess.run(tf.global_variables_initializer())
     # 学習プロセス開始
     for itr in range(epoch_num):
         if itr % 1000 == 0:
             try:
-                gene_image = generator().eval()
-                img_obj = gene_image.reshape(image_x, image_y, 3) * 255.0
-                file_name = "../output/%06d_img.png" % itr
-                cv2.imwrite(file_name, img_obj)
+                dirname = "../output/%06d/" % itr
+                if not os.path.isdir(dirname):
+                    os.makedirs(dirname)
+                for i in range(9):
+                    gene_image = generator().eval()
+                    img_obj = gene_image.reshape(image_x, image_y, 3) * 255.0
+                    file_name = dirname + "%02d.png" % i
+                    cv2.imwrite(file_name, img_obj)
             except:
                 pass
 
@@ -102,23 +107,21 @@ with tf.Session() as sess:
             l_rate *= 1.1
             print("Learning rate Change!! -> %.6f" % l_rate)
 
-        # Generator
-        sess.run([G_solver], feed_dict={labels: G_labels, learning_rate: l_rate})
-
         # Discriminator-Real
         rand_data = []
         rand_idx = np.random.randint(0, len(train_data), batch_size)
         for i in rand_idx:
             # ノイズを追加してランダムに並び替え
-            gauss = np.random.normal(0, 0.01, train_data[i].shape)
+            gauss = np.random.normal(0, 0.005, train_data[i].shape)
             train_image_gs = train_data[i] + gauss
-            rand_data.append(train_image_gs)
+            rand_data.append(train_data[i])
         train_np_data = np.asarray(rand_data)
         sess.run([D_solver, D_loss], feed_dict={images: train_np_data, labels: D_real_labels, learning_rate: l_rate})
 
         # Generator & Discriminator-Fake
-        _, gene_image, G_loss_curr = sess.run([G_solver, G, G_loss], feed_dict={labels: G_labels, learning_rate: l_rate})
-        _, D_loss_curr = sess.run([D_solver, D_loss], feed_dict={images: gene_image, labels: D_fake_labels, learning_rate: l_rate})
+        for i in range(2):
+            _, gene_image, G_loss_curr = sess.run([G_solver, G, G_loss], feed_dict={labels: G_labels, learning_rate: l_rate})
+            _, D_loss_curr = sess.run([D_solver, D_loss], feed_dict={images: gene_image, labels: D_fake_labels, learning_rate: l_rate})
 
         if itr % 100 == 0:
             print('Iter: {}'.format(itr))

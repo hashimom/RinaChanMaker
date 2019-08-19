@@ -106,5 +106,6 @@ venv.bak/
 # debug
 .idea/
 output/
+model/
 train/*.png
 
