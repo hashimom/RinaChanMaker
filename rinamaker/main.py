@@ -15,11 +15,15 @@ image_size = image_x * image_y
 # RGB
 image_data_size = image_size * 3
 
-d_batch_size = 256
+d_batch_size = 512
 g_batch_size = 512
 Z_dim = 100
-epoch_num = 10000
+epoch_num = 20000
 
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
 
 class Trainer():
     def __init__(self, target_path, output_path, out_model_path, dummy_path=None):
@@ -67,29 +71,24 @@ class Trainer():
             img = cv2.resize(img, (image_x, image_y))
             image_ary.append(img.flatten().astype(np.float32) / 255.0)
 
-        # numpy形式に変換
-        # return np.asarray(image_ary)
+        print("image len: %d" % len(file_list))
         return image_ary
 
     @tf.function
     def train_gene(self):
         with tf.GradientTape() as g_tape:
             gene_image = self.gene(g_batch_size)
-            g_loss = self.disc(gene_image, self.g_labels, 0.1)
+            g_loss = self.disc(gene_image, self.g_labels, 0.0)
         grads = g_tape.gradient(g_loss, self.gene.trainable_variables)
         self.gene_opt.apply_gradients(zip(grads, self.gene.trainable_variables))
-
-        with tf.GradientTape() as d_tape:
-            d_loss = self.disc(gene_image, self.d_fake_labels, 0.5)
-        grads = d_tape.gradient(d_loss, self.disc.trainable_variables)
-        self.disc_opt.apply_gradients(zip(grads, self.disc.trainable_variables))
-
-        return g_loss, d_loss
+        return g_loss, gene_image
 
     @tf.function
-    def train_disc(self, img):
+    def train_disc(self, real_img, gene_img):
         with tf.GradientTape() as tape:
-            loss = self.disc(img, self.d_real_labels, 0.5)
+            loss_real = self.disc(real_img, self.d_real_labels, 0.5)
+            loss_gene = self.disc(gene_img, self.d_fake_labels, 0.5)
+            loss = ((loss_real * d_batch_size) + (loss_gene * g_batch_size)) / (d_batch_size + g_batch_size)
         grads = tape.gradient(loss, self.disc.trainable_variables)
         self.disc_opt.apply_gradients(zip(grads, self.disc.trainable_variables))
         return loss
@@ -97,7 +96,7 @@ class Trainer():
     def __call__(self):
         # 学習プロセス開始
         for itr in range(epoch_num):
-            if itr % 10 == 0:
+            if itr % 100 == 0:
                 try:
                     dirname = self.output_path + "/%06d/" % itr
                     if not os.path.isdir(dirname):
@@ -109,23 +108,24 @@ class Trainer():
                         file_name = dirname + "%02d.png" % i
                         cv2.imwrite(file_name, img_obj)
                 except:
+                    print("error")
                     pass
+            
+            # Generator
+            g_loss_curr, gene_image = self.train_gene()
 
-            # Discriminator-Real
+            # Discriminator
             rand_data = []
             rand_idx = np.random.randint(0, self.target_len, d_batch_size)
             for i in rand_idx:
                 rand_data.append(self.target_image[i])
             train_np_data = np.asarray(rand_data)
-            self.train_disc(train_np_data)
+            d_loss_curr = self.train_disc(train_np_data, gene_image)
 
-            # Generator & Discriminator-Fake
-            G_loss_curr, D_loss_curr = self.train_gene()
-
-            if itr % 1 == 0:
+            if itr % 10 == 0:
                 print('Iter: {}'.format(itr))
-                print(" D loss: " + str(D_loss_curr))
-                print(" G_loss: " + str(G_loss_curr))
+                print(" G_loss: " + str(g_loss_curr))
+                print(" D loss: " + str(d_loss_curr))
 
             # 学習モデル出力
             #save_path = saver.save(sess, model_path)

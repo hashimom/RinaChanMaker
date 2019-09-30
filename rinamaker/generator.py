@@ -18,10 +18,10 @@ class Generator(tf.Module):
         self.b_fc2 = tf.Variable(init_b(shape=(9 * 9 * 64)))
 
         # conv2d-1s
-        self.W_conv1 = tf.Variable(init_w(shape=(18, 18, 32, 64), dtype="float32"))
+        self.W_conv1 = tf.Variable(init_w(shape=(18, 18, 36, 64), dtype="float32"))
 
         # conv2d-2
-        self.W_conv2 = tf.Variable(init_w(shape=(x_size, y_size, 3, 32), dtype="float32"))
+        self.W_conv2 = tf.Variable(init_w(shape=(x_size, y_size, 3, 36), dtype="float32"))
 
     @tf.function
     def __call__(self, batch_size=1):
@@ -36,12 +36,12 @@ class Generator(tf.Module):
 
         h_fc2 = tf.matmul(h_fc1, self.W_fc2) + self.b_fc2
         h_fc2 = tf.nn.leaky_relu(self.batch_norm(h_fc2, [0, 1]))
-        h_fc2 = tf.nn.dropout(h_fc2, 0.5)
+        h_fc2 = tf.nn.dropout(h_fc2, 0.1)
         h_conv_in = tf.reshape(h_fc2, [-1, 9, 9, 64])
 
         # 畳み込み層1
-        h_conv1 = self.conv2d_transpose(h_conv_in, self.W_conv1, [18, 18, 32])
-        h_conv1 = tf.nn.leaky_relu(self.batch_norm(h_conv1, [0, 1]))
+        h_conv1 = self.conv2d_transpose(h_conv_in, self.W_conv1, [18, 18, 36])
+        h_conv1 = tf.nn.leaky_relu(self.batch_norm(h_conv1, [0, 1, 2]))
 
         # 畳み込み層2
         img = self.conv2d_transpose(h_conv1, self.W_conv2, [self.x_size, self.y_size, 3])
