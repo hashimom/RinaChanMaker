@@ -17,7 +17,7 @@ image_data_size = image_size * 3
 
 d_batch_size = 512
 g_batch_size = 512
-Z_dim = 100
+Z_dim = 128
 epoch_num = 20000
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -32,7 +32,7 @@ class Trainer():
         self.disc = Discriminator(image_x, image_y)
 
         # Optimizer
-        self.gene_opt = tf.optimizers.Adam(0.00001)
+        self.gene_opt = tf.optimizers.Adam(0.00005)
         self.disc_opt = tf.optimizers.Adam(0.00001)
 
         # 画像生成用ディレクトリの作成
@@ -78,17 +78,15 @@ class Trainer():
     def train_gene(self):
         with tf.GradientTape() as g_tape:
             gene_image = self.gene(g_batch_size)
-            g_loss = self.disc(gene_image, self.g_labels, 0.0)
+            g_loss = self.disc(gene_image, self.g_labels, 0.1)
         grads = g_tape.gradient(g_loss, self.gene.trainable_variables)
         self.gene_opt.apply_gradients(zip(grads, self.gene.trainable_variables))
         return g_loss, gene_image
 
     @tf.function
-    def train_disc(self, real_img, gene_img):
+    def train_disc(self, train_img, train_label):
         with tf.GradientTape() as tape:
-            loss_real = self.disc(real_img, self.d_real_labels, 0.5)
-            loss_gene = self.disc(gene_img, self.d_fake_labels, 0.5)
-            loss = ((loss_real * d_batch_size) + (loss_gene * g_batch_size)) / (d_batch_size + g_batch_size)
+            loss = self.disc(train_img, train_label, 0.1)
         grads = tape.gradient(loss, self.disc.trainable_variables)
         self.disc_opt.apply_gradients(zip(grads, self.disc.trainable_variables))
         return loss
@@ -101,11 +99,11 @@ class Trainer():
                     dirname = self.output_path + "/%06d/" % itr
                     if not os.path.isdir(dirname):
                         os.makedirs(dirname)
-                    for i in range(9):
+                    for i in range(10):
                         gene_image = self.gene()
                         img_obj = tf.reshape(gene_image, [image_x, image_y, 3])
                         img_obj = img_obj.numpy() * 255.0
-                        file_name = dirname + "%02d.png" % i
+                        file_name = dirname + "%02d.png" % (i + 1)
                         cv2.imwrite(file_name, img_obj)
                 except:
                     print("error")
@@ -116,13 +114,21 @@ class Trainer():
 
             # Discriminator
             rand_data = []
-            rand_idx = np.random.randint(0, self.target_len, d_batch_size)
+            rand_label = []
+            train_gene_image = gene_image.numpy()
+            dsc_data = np.vstack((train_gene_image, self.target_image))
+            rand_idx = np.random.randint(0, dsc_data.shape[0], d_batch_size)
             for i in rand_idx:
-                rand_data.append(self.target_image[i])
-            train_np_data = np.asarray(rand_data)
-            d_loss_curr = self.train_disc(train_np_data, gene_image)
+                rand_data.append(dsc_data[i])
+                if i < g_batch_size:
+                    rand_label.append(0)
+                else:
+                    rand_label.append(1)
+            train_data = np.asarray(rand_data)
+            train_label = np.asarray(rand_idx)
+            d_loss_curr = self.train_disc(train_data, train_label)
 
-            if itr % 10 == 0:
+            if itr % 100 == 0:
                 print('Iter: {}'.format(itr))
                 print(" G_loss: " + str(g_loss_curr))
                 print(" D loss: " + str(d_loss_curr))
